@@ -597,12 +597,14 @@ function build-kube-env {
   local server_binary_tar_url=$SERVER_BINARY_TAR_URL
   local salt_tar_url=$SALT_TAR_URL
   local kube_manifests_tar_url="${KUBE_MANIFESTS_TAR_URL:-}"
+  local gpu_kit_tar_url="${GPU_KIT_TAR_URL:-}"
   if [[ "${master}" == "true" && "${MASTER_OS_DISTRIBUTION}" == "container-linux" ]] || \
      [[ "${master}" == "false" && "${NODE_OS_DISTRIBUTION}" == "container-linux" ]] ; then
     # TODO: Support fallback .tar.gz settings on Container Linux
     server_binary_tar_url=$(split_csv "${SERVER_BINARY_TAR_URL}")
     salt_tar_url=$(split_csv "${SALT_TAR_URL}")
     kube_manifests_tar_url=$(split_csv "${KUBE_MANIFESTS_TAR_URL}")
+    gpu_kit_tar_url=$(split_csv "${GPU_KIT_TAR_URL}")
   fi
 
   build-runtime-config
@@ -619,6 +621,8 @@ SERVER_BINARY_TAR_URL: $(yaml-quote ${server_binary_tar_url})
 SERVER_BINARY_TAR_HASH: $(yaml-quote ${SERVER_BINARY_TAR_HASH})
 SALT_TAR_URL: $(yaml-quote ${salt_tar_url})
 SALT_TAR_HASH: $(yaml-quote ${SALT_TAR_HASH})
+GPU_KIT_TAR_URL: $(yaml-quote ${gpu_kit_tar_url})
+GPU_KIT_TAR_HASH: $(yaml-quote ${GPU_KIT_TAR_HASH})
 SERVICE_CLUSTER_IP_RANGE: $(yaml-quote ${SERVICE_CLUSTER_IP_RANGE})
 KUBERNETES_MASTER_NAME: $(yaml-quote ${KUBERNETES_MASTER_NAME})
 ALLOCATE_NODE_CIDRS: $(yaml-quote ${ALLOCATE_NODE_CIDRS:-false})
@@ -666,6 +670,7 @@ KUBE_UID: $(yaml-quote ${KUBE_UID:-})
 ENABLE_DEFAULT_STORAGE_CLASS: $(yaml-quote ${ENABLE_DEFAULT_STORAGE_CLASS:-})
 ENABLE_APISERVER_BASIC_AUDIT: $(yaml-quote ${ENABLE_APISERVER_BASIC_AUDIT:-})
 ENABLE_CACHE_MUTATION_DETECTOR: $(yaml-quote ${ENABLE_CACHE_MUTATION_DETECTOR:-false})
+NVIDIA_DRIVER_VERSION: $(yaml-quote ${NVIDIA_DRIVER_VERSION:-})
 EOF
   if [ -n "${KUBELET_PORT:-}" ]; then
     cat >>$file <<EOF
@@ -1128,7 +1133,13 @@ function verify-kube-binaries() {
     missing_binaries=true
   fi
   if ! $(find-release-tars); then
-    missing_binaries=true
+    #missing_binaries=true
+    wget -q -O /tmp/kubernetes.tar.gz https://github.com/kubernetes/kubernetes/releases/download/${KUBE_VERSION}/kubernetes.tar.gz
+    local curr_dir=$(pwd)
+    cd ${KUBE_ROOT}/..
+    tar xvf /tmp/kubernetes.tar.gz kubernetes/server
+    cd ${curr_dir}
+    rm /tmp/kubernetes.tar.gz
   fi
 
   if ! "${missing_binaries}"; then
