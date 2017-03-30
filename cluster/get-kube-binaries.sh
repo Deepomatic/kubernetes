@@ -92,7 +92,7 @@ function detect_client_info() {
       ;;
     s390x*)
       CLIENT_ARCH="s390x"
-      ;;	  
+      ;;
     *)
       echo "Unknown, unsupported architecture (${machine})." >&2
       echo "Supported architectures x86_64, i686, arm, arm64, s390x." >&2

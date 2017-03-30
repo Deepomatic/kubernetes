@@ -150,6 +150,24 @@ function install-kube-binary-config {
   cp "${dst_dir}/kubernetes/gci-trusty/container-linux-configure-helper.sh" "${KUBE_HOME}/bin/configure-helper.sh"
   chmod -R 755 "${kube_bin}"
 
+  if [ -n "${GPU_KIT_TAR_URL:-}" ]; then
+    if [ $(nvidia-smi > /dev/null 2> /dev/null || echo $?) != "0" ]; then
+      dst_dir="${KUBE_HOME}/gpu-kit"
+      mkdir -p "${dst_dir}"
+      local -r gpu_kit_tar_urls=( $(split-commas "${GPU_KIT_TAR_URL}") )
+      local -r gpu_kit_tar="${gpu_kit_tar_urls[0]##*/}"
+      download-or-bust "${GPU_KIT_TAR_HASH}" "${gpu_kit_tar_urls[@]}"
+      tar xzf "${KUBE_HOME}/${gpu_kit_tar}" -C "${dst_dir}" --overwrite
+      export NVIDIA_DRIVER_VERSION
+      bash ${KUBE_HOME}/gpu-kit/install.sh
+      rm -rf "${KUBE_HOME}/gpu-kit"
+      rm -f "${KUBE_HOME}/${gpu_kit_tar}"
+      rm -f "${KUBE_HOME}/${gpu_kit_tar}.sha1"
+    else
+      echo "nvidia-smi already working. Skipping..."
+    fi
+  fi
+
   # Clean up.
   rm -rf "${KUBE_HOME}/kubernetes"
   rm -f "${KUBE_HOME}/${server_binary_tar}"
@@ -174,3 +192,4 @@ echo "::1 localhost" >> /etc/hosts
 
 echo "Configuring hostname"
 hostnamectl set-hostname $(hostname | cut -f1 -d.)
+

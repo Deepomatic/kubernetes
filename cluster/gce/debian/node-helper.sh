@@ -16,12 +16,15 @@
 
 # A library of helper functions and constant for debian os distro
 
+function get-node-instance-template-args {
+    echo "startup-script=${KUBE_TEMP}/configure-vm.sh" \
+         "kube-env=${KUBE_TEMP}/node-kube-env.yaml" \
+         "cluster-name=${KUBE_TEMP}/cluster-name.txt"
+}
+
 # $1: template name (required)
 function create-node-instance-template {
   local template_name="$1"
   prepare-startup-script
-  create-node-template "$template_name" "${scope_flags}" \
-    "startup-script=${KUBE_TEMP}/configure-vm.sh" \
-    "kube-env=${KUBE_TEMP}/node-kube-env.yaml" \
-    "cluster-name=${KUBE_TEMP}/cluster-name.txt"
+  create-node-template "$template_name" "${scope_flags}" $(get-node-instance-template-args)
 }

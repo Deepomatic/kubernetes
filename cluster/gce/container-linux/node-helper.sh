@@ -17,14 +17,31 @@
 # A library of helper functions and constant for the Container Linux distro.
 source "${KUBE_ROOT}/cluster/gce/container-linux/helper.sh"
 
+function write-gpu-kit {
+    if [ ! -f ${KUBE_TEMP}/gpu-kit.tar.gz ]; then
+        export GPU_KIT_TAR=${KUBE_ROOT}/server/gpu-kit.tar.gz
+        tar -C $(dirname "${BASH_SOURCE[0]}")/gpu-kit -cz . > ${GPU_KIT_TAR}
+    fi
+}
+
+function get-node-instance-template-args {
+    if [ "${GPU_COUNT}" -gt "0" ]; then
+        echo "kube-env=${KUBE_TEMP}/node-kube-env.yaml" \
+             "user-data=${KUBE_ROOT}/cluster/gce/container-linux/node-gpu.yaml" \
+             "configure-sh=${KUBE_ROOT}/cluster/gce/container-linux/configure.sh" \
+             "cluster-name=${KUBE_TEMP}/cluster-name.txt"
+    else
+        echo "kube-env=${KUBE_TEMP}/node-kube-env.yaml" \
+             "user-data=${KUBE_ROOT}/cluster/gce/container-linux/node.yaml" \
+             "configure-sh=${KUBE_ROOT}/cluster/gce/container-linux/configure.sh" \
+             "cluster-name=${KUBE_TEMP}/cluster-name.txt"
+    fi
+}
+
 # $1: template name (required).
 function create-node-instance-template {
   local template_name="$1"
 
-  create-node-template "$template_name" "${scope_flags[*]}" \
-    "kube-env=${KUBE_TEMP}/node-kube-env.yaml" \
-    "user-data=${KUBE_ROOT}/cluster/gce/container-linux/node.yaml" \
-    "configure-sh=${KUBE_ROOT}/cluster/gce/container-linux/configure.sh" \
-    "cluster-name=${KUBE_TEMP}/cluster-name.txt"
+  create-node-template "$template_name" "${scope_flags[*]}" $(get-node-instance-template-args)
   # TODO(euank): We should include update-strategy here. We should also switch to ignition
 }

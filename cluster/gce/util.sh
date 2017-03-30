@@ -214,6 +214,7 @@ function set-preferred-region() {
 #   SERVER_BINARY_TAR
 #   SALT_TAR
 #   KUBE_MANIFESTS_TAR
+#   GPU_KIT_TAR
 #   ZONE
 # Vars set:
 #   SERVER_BINARY_TAR_URL
@@ -222,6 +223,8 @@ function set-preferred-region() {
 #   SALT_TAR_HASH
 #   KUBE_MANIFESTS_TAR_URL
 #   KUBE_MANIFESTS_TAR_HASH
+#   GPU_KIT_TAR_URL
+#   GPU_KIT_TAR_HASH
 function upload-server-tars() {
   SERVER_BINARY_TAR_URL=
   SERVER_BINARY_TAR_HASH=
@@ -229,6 +232,8 @@ function upload-server-tars() {
   SALT_TAR_HASH=
   KUBE_MANIFESTS_TAR_URL=
   KUBE_MANIFESTS_TAR_HASH=
+  GPU_KIT_TAR_URL=
+  GPU_KIT_TAR_HASH=
 
   local project_hash
   if which md5 > /dev/null 2>&1; then
@@ -248,10 +253,14 @@ function upload-server-tars() {
   if [[ -n "${KUBE_MANIFESTS_TAR:-}" ]]; then
     KUBE_MANIFESTS_TAR_HASH=$(sha1sum-file "${KUBE_MANIFESTS_TAR}")
   fi
+  if [[ -n "${GPU_KIT_TAR:-}" ]]; then
+    GPU_KIT_TAR_HASH=$(sha1sum-file "${GPU_KIT_TAR}")
+  fi
 
   local server_binary_tar_urls=()
   local salt_tar_urls=()
   local kube_manifest_tar_urls=()
+  local gpu_kit_tar_urls=()
 
   for region in "${PREFERRED_REGION[@]}"; do
     suffix="-${region}"
@@ -283,12 +292,21 @@ function upload-server-tars() {
       # Convert from gs:// URL to an https:// URL
       kube_manifests_tar_urls+=("${kube_manifests_gs_url/gs:\/\//https://storage.googleapis.com/}")
     fi
+    if [[ -n "${GPU_KIT_TAR:-}" ]]; then
+      local gpu_kit_gs_url="${staging_path}/${GPU_KIT_TAR##*/}"
+      copy-to-staging "${staging_path}" "${gpu_kit_gs_url}" "${GPU_KIT_TAR}" "${GPU_KIT_TAR_HASH}"
+      # Convert from gs:// URL to an https:// URL
+      gpu_kit_tar_urls+=("${gpu_kit_gs_url/gs:\/\//https://storage.googleapis.com/}")
+    fi
   done
 
   SERVER_BINARY_TAR_URL=$(join_csv "${server_binary_tar_urls[@]}")
   SALT_TAR_URL=$(join_csv "${salt_tar_urls[@]}")
   if [[ -n "${KUBE_MANIFESTS_TAR:-}" ]]; then
     KUBE_MANIFESTS_TAR_URL=$(join_csv "${kube_manifests_tar_urls[@]}")
+  fi
+  if [[ -n "${GPU_KIT_TAR:-}" ]]; then
+    GPU_KIT_TAR_URL=$(join_csv "${gpu_kit_tar_urls[@]}")
   fi
 }
 
@@ -657,6 +675,11 @@ function kube-up() {
 
   # Make sure we have the tar files staged on Google Storage
   find-release-tars
+  if [ "${GPU_COUNT}" -gt "0" ]; then
+    write-gpu-kit
+  else
+    GPU_KIT_TAR=""
+  fi
   upload-server-tars
 
   # ensure that environmental variables specifying number of migs to create
@@ -710,6 +733,7 @@ function check-existing() {
       if [[ ${run_kube_down} == "y" || ${run_kube_down} == "Y" || ${KUBE_UP_AUTOMATIC_CLEANUP} == "true" ]]; then
         echo "... calling kube-down" >&2
         kube-down
+        read -p "kube-down done. Press a key to continue "
       fi
     fi
   fi
@@ -1213,8 +1237,6 @@ function create-nodes-firewall() {
 }
 
 function create-nodes-template() {
-  echo "Creating minions."
-
   # TODO(zmerlynn): Refactor setting scope flags.
   local scope_flags=
   if [[ -n "${NODE_SCOPES}" ]]; then
@@ -1224,6 +1246,10 @@ function create-nodes-template() {
   fi
 
   write-node-env
+
+  if [ "${GPU_COUNT}" -gt 0 ]; then
+    return
+  fi
 
   local template_name="${NODE_INSTANCE_PREFIX}-template"
 
@@ -1252,34 +1278,78 @@ function set_num_migs() {
 # - PROJECT
 # - ZONE
 function create-nodes() {
-  local template_name="${NODE_INSTANCE_PREFIX}-template"
-
-  local instances_left=${NUM_NODES}
-
-  #TODO: parallelize this loop to speed up the process
-  for ((i=1; i<=${NUM_MIGS}; i++)); do
-    local group_name="${NODE_INSTANCE_PREFIX}-group-$i"
-    if [[ $i == ${NUM_MIGS} ]]; then
-      # TODO: We don't add a suffix for the last group to keep backward compatibility when there's only one MIG.
-      # We should change it at some point, but note #18545 when changing this.
-      group_name="${NODE_INSTANCE_PREFIX}-group"
+  if [ "${GPU_COUNT}" -gt 0 ]; then
+    if [ -n "${NODE_SCOPES}" ]; then
+      scope_flags="--scopes ${NODE_SCOPES}"
+    else
+      scope_flags="--no-scopes"
     fi
-    # Spread the remaining number of nodes evenly
-    this_mig_size=$((${instances_left} / (${NUM_MIGS}-${i}+1)))
-    instances_left=$((instances_left-${this_mig_size}))
+    for ((i=1; i<=${NUM_NODES}; i++)); do
+      local attempt=1
+      while true; do
+        echo "Attempt ${attempt} to create node ${NODE_INSTANCE_PREFIX}-$i" >&2
+        if ! gcloud beta compute instances create ${NODE_INSTANCE_PREFIX}-$i \
+          --project "${PROJECT}" \
+          --zone "${ZONE}" \
+          --machine-type "${NODE_SIZE}" \
+          --boot-disk-type "${NODE_DISK_TYPE}" \
+          --boot-disk-size "${NODE_DISK_SIZE}" \
+          --image-project "${NODE_IMAGE_PROJECT}" \
+          --image "${NODE_IMAGE}" \
+          --tags "${NODE_TAG},gpu" \
+          --network "${NETWORK}" \
+          ${scope_flags} \
+          --accelerator type=${GPU_TYPE},count=${GPU_COUNT} \
+          --maintenance-policy TERMINATE \
+          --can-ip-forward \
+          --metadata-from-file $(echo $(get-node-instance-template-args) | tr ' ' ',') >&2; then
+            if (( attempt > 5 )); then
+              echo -e "${color_red}Failed to create instance ${NODE_INSTANCE_PREFIX}-$i ${color_norm}" >&2
+              exit 2
+            fi
+            echo -e "${color_yellow}Attempt ${attempt} failed to create instance ${NODE_INSTANCE_PREFIX}-$i. Retrying.${color_norm}" >&2
+            attempt=$(($attempt+1))
+            sleep $(($attempt * 5))
 
-    gcloud compute instance-groups managed \
-        create "${group_name}" \
-        --project "${PROJECT}" \
-        --zone "${ZONE}" \
-        --base-instance-name "${group_name}" \
-        --size "${this_mig_size}" \
-        --template "$template_name" || true;
-    gcloud compute instance-groups managed wait-until-stable \
-        "${group_name}" \
-        --zone "${ZONE}" \
-        --project "${PROJECT}" || true;
-  done
+            # In case the previous attempt failed with something like a
+            # Backend Error and left the entry laying around, delete it
+            # before we try again.
+            gcloud compute instance delete "${NODE_INSTANCE_PREFIX}-$i" --project "${PROJECT}" &>/dev/null || true
+        else
+            break
+        fi
+      done
+    done
+  else
+    local template_name="${NODE_INSTANCE_PREFIX}-template"
+
+    local instances_left=${NUM_NODES}
+
+    #TODO: parallelize this loop to speed up the process
+    for ((i=1; i<=${NUM_MIGS}; i++)); do
+      local group_name="${NODE_INSTANCE_PREFIX}-group-$i"
+      if [[ $i == ${NUM_MIGS} ]]; then
+        # TODO: We don't add a suffix for the last group to keep backward compatibility when there's only one MIG.
+        # We should change it at some point, but note #18545 when changing this.
+        group_name="${NODE_INSTANCE_PREFIX}-group"
+      fi
+      # Spread the remaining number of nodes evenly
+      this_mig_size=$((${instances_left} / (${NUM_MIGS}-${i}+1)))
+      instances_left=$((instances_left-${this_mig_size}))
+
+      gcloud compute instance-groups managed \
+          create "${group_name}" \
+          --project "${PROJECT}" \
+          --zone "${ZONE}" \
+          --base-instance-name "${group_name}" \
+          --size "${this_mig_size}" \
+          --template "$template_name" || true;
+      gcloud compute instance-groups managed wait-until-stable \
+          "${group_name}" \
+          --zone "${ZONE}" \
+          --project "${PROJECT}" || true;
+    done
+  fi
 }
 
 # Assumes:
@@ -1470,6 +1540,27 @@ function kube-down() {
     # Wait for last batch of jobs
     kube::util::wait-for-jobs || {
       echo -e "Failed to delete instance group(s)." >&2
+    }
+
+    # Delete instances
+    NODE_NAMES=()
+    NODE_NAMES+=($(gcloud compute instances list \
+    --zones "${ZONE}" --project "${PROJECT}" \
+    --regexp "${NODE_INSTANCE_PREFIX}-.+" \
+    --format='value(name)' || true))
+    for node in ${NODE_NAMES[@]:-}; do
+      if gcloud compute instances describe "${node}" --project "${PROJECT}" --zone "${ZONE}" &>/dev/null; then
+        gcloud compute instances delete \
+          --project "${PROJECT}" \
+          --quiet \
+          --zone "${ZONE}" \
+          "${node}" &
+      fi
+    done
+
+    # Wait for last batch of jobs
+    kube::util::wait-for-jobs || {
+      echo -e "Failed to delete instance(s)." >&2
     }
 
     for template in ${templates[@]:-}; do
