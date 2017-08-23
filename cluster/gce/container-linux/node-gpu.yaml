@@ -4,6 +4,8 @@ coreos:
   update:
     reboot-strategy: off
   units:
+    - name: update-engine.service # Disable kernel update (as it lead to re-installation of nvidia-drivers, which might go wrong for uncontrolled kernel version)
+      mask: true
     - name: locksmithd.service
       mask: true
     - name: kube-node-installation.service
@@ -28,16 +30,12 @@ coreos:
       content: |
         [Unit]
         Description=Load NVIDIA module
-        Requires=kube-node-installation.service
-        After=kube-node-installation.service
+        After=network-online.target
 
         [Service]
         Type=oneshot
         RemainAfterExit=yes
         ExecStart=/usr/sbin/insmod /opt/lib64/modules/nvidia.ko
-
-        [Install]
-        WantedBy=kubernetes.target
     - name: nvidia-persistenced.service
       command: start
       content: |
@@ -52,13 +50,17 @@ coreos:
         RemainAfterExit=yes
         ExecStart=/opt/bin/nvidia-persistenced --user nvidia-persistenced
         ExecStopPost=/bin/rm -rf /var/run/nvidia-persistenced
+
+        [Install]
+        WantedBy=kubernetes.target
     - name: kube-node-configuration.service
       command: start
       content: |
         [Unit]
         Description=Configure kubernetes master
-        Requires=nvidia-persistenced.service
-        After=nvidia-persistenced.service
+        Requires=docker.service
+        After=docker.service
+        After=kube-node-installation.service
 
         [Service]
         Type=oneshot

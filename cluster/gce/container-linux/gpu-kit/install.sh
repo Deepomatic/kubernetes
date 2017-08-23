@@ -78,6 +78,6 @@ untar_file ${MOD_PATH} ${MOD_FILE}
 ldconfig
 
 # Create nvidia-persistence user
-useradd --system --home '/' --shell '/sbin/nologin' -c 'NVIDIA Persistence Daemon' nvidia-persistenced
+useradd --system --home '/' --shell '/sbin/nologin' -c 'NVIDIA Persistence Daemon' nvidia-persistenced || echo "Probably already existing"
 
 
