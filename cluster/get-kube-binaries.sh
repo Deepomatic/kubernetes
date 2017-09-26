@@ -161,6 +161,8 @@ DOWNLOAD_URL_PREFIX="${KUBERNETES_RELEASE_URL}/${KUBE_VERSION}"
 SERVER_PLATFORM="linux"
 SERVER_ARCH="${KUBERNETES_SERVER_ARCH:-amd64}"
 SERVER_TAR="kubernetes-server-${SERVER_PLATFORM}-${SERVER_ARCH}.tar.gz"
+SALT_TAR="kubernetes-salt.tar.gz"
+MANIFESTS_TAR="${SERVER_TAR/server-linux-amd64/manifests}"
 
 detect_client_info
 CLIENT_TAR="kubernetes-client-${CLIENT_PLATFORM}-${CLIENT_ARCH}.tar.gz"
@@ -176,6 +178,18 @@ DOWNLOAD_SERVER_TAR=false
 if [[ ! -e "${KUBE_ROOT}/server/${SERVER_TAR}" ]]; then
   DOWNLOAD_SERVER_TAR=true
   echo "Will download ${SERVER_TAR} from ${DOWNLOAD_URL_PREFIX}"
+fi
+
+DOWNLOAD_SALT_TAR=false
+if [[ ! -e "${KUBE_ROOT}/server/${SALT_TAR}" ]]; then
+  DOWNLOAD_SALT_TAR=true
+  echo "Will download ${SALT_TAR} from ${DOWNLOAD_URL_PREFIX}"
+fi
+
+DOWNLOAD_MANIFEST_TAR=false
+if [[ ! -e "${KUBE_ROOT}/server/${MANIFESTS_TAR}" ]]; then
+  DOWNLOAD_MANIFEST_TAR=true
+  echo "Will download ${MANIFESTS_TAR} from ${DOWNLOAD_URL_PREFIX}"
 fi
 
 # TODO: remove this check and default to true when we stop shipping kubectl
@@ -195,6 +209,8 @@ fi
 
 if [[ "${DOWNLOAD_CLIENT_TAR}" == false && \
       "${DOWNLOAD_SERVER_TAR}" == false && \
+      "${DOWNLOAD_SALT_TAR}" == false && \
+      "${DOWNLOAD_MANIFEST_TAR}" == false && \
       "${DOWNLOAD_TESTS_TAR}" == false ]]; then
   echo "Nothing additional to download."
   exit 0
@@ -211,6 +227,14 @@ fi
 
 if "${DOWNLOAD_SERVER_TAR}"; then
   download_tarball "${KUBE_ROOT}/server" "${SERVER_TAR}"
+fi
+
+if "${DOWNLOAD_SALT_TAR}"; then
+  download_tarball "${KUBE_ROOT}/server" "${SALT_TAR}"
+fi
+
+if "${DOWNLOAD_MANIFEST_TAR}"; then
+  download_tarball "${KUBE_ROOT}/server" "${MANIFESTS_TAR}"
 fi
 
 if "${DOWNLOAD_CLIENT_TAR}"; then

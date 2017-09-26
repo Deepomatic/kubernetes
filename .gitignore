@@ -122,3 +122,8 @@ zz_generated.openapi.go
 
 /bazel-*
 *.pyc
+
+# Downloaded by kube-up script
+client/
+platforms/
+server/
