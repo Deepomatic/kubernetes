@@ -121,3 +121,8 @@ kubernetes.tar.gz
 
 /bazel-*
 *.pyc
+
+# Downloaded by kube-up script
+client/
+platforms/
+server/
