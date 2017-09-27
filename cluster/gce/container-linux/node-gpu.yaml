@@ -31,11 +31,15 @@ coreos:
         [Unit]
         Description=Load NVIDIA module
         After=network-online.target
+        After=kube-node-installation.service
 
         [Service]
         Type=oneshot
         RemainAfterExit=yes
         ExecStart=/usr/sbin/insmod /opt/lib64/modules/nvidia.ko
+
+        [Install]
+        RequiredBy=kube-node-installation.service
     - name: nvidia-persistenced.service
       command: start
       content: |
@@ -61,6 +65,7 @@ coreos:
         Requires=docker.service
         After=docker.service
         After=kube-node-installation.service
+        After=nvidia-persistenced.target
 
         [Service]
         Type=oneshot
@@ -70,6 +75,7 @@ coreos:
 
         [Install]
         WantedBy=kubernetes.target
+        Requires=kube-node-installation.service
     - name: kubernetes.target
       enable: true
       command: start
