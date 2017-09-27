@@ -589,6 +589,7 @@ EOF
   # Flush iptables nat table
   iptables -t nat -F || true
 
+  systemctl daemon-reload
   systemctl start kubelet.service
 }
 
