@@ -40,8 +40,8 @@ mkdir -p ${BIN_PATH}
 cp ${SCRIPT_DIR}/create-uvm-dev-node.sh ${BIN_PATH}/
 
 # Download drivers
-COREOS_VERSION=$(cat /etc/os-release | grep "VERSION=" | cut -f2 -d=)
-DRIVERS_ARCHIVE=drivers-${COREOS_VERSION}-${NVIDIA_DRIVER_VERSION}.tar
+source /usr/share/coreos/release
+DRIVERS_ARCHIVE=drivers-${COREOS_RELEASE_VERSION}-${NVIDIA_DRIVER_VERSION}.tar
 set +e
 mkdir -p /opt
 cd /opt
@@ -63,7 +63,7 @@ fi
 # Unzip drivers
 BIN_FILE=/opt/tools-${NVIDIA_DRIVER_VERSION}.tar.bz2
 LIB_FILE=/opt/libraries-${NVIDIA_DRIVER_VERSION}.tar.bz2
-MOD_FILE=/opt/modules-${COREOS_VERSION}-${NVIDIA_DRIVER_VERSION}.tar.bz2
+MOD_FILE=/opt/modules-${COREOS_RELEASE_VERSION}-${NVIDIA_DRIVER_VERSION}.tar.bz2
 rm -f $BIN_FILE $LIB_FILE $MOD_FILE
 tar -xvf ${DRIVERS_ARCHIVE}
 rm ${DRIVERS_ARCHIVE}
@@ -79,5 +79,3 @@ ldconfig
 
 # Create nvidia-persistence user
 useradd --system --home '/' --shell '/sbin/nologin' -c 'NVIDIA Persistence Daemon' nvidia-persistenced || echo "Probably already existing"
-
-
