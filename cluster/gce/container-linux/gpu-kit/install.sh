@@ -41,7 +41,7 @@ cp ${SCRIPT_DIR}/create-uvm-dev-node.sh ${BIN_PATH}/
 
 # Download drivers
 COREOS_VERSION=$(cat /etc/os-release | grep "VERSION=" | cut -f2 -d=)
-DRIVERS_ARCHIVE=drivers-${COREOS_VERSION}-${NVIDIA_DRIVER_VERSION}.tar.bz2
+DRIVERS_ARCHIVE=drivers-${COREOS_VERSION}-${NVIDIA_DRIVER_VERSION}.tar
 set +e
 mkdir -p /opt
 cd /opt
@@ -65,7 +65,7 @@ BIN_FILE=/opt/tools-${NVIDIA_DRIVER_VERSION}.tar.bz2
 LIB_FILE=/opt/libraries-${NVIDIA_DRIVER_VERSION}.tar.bz2
 MOD_FILE=/opt/modules-${COREOS_VERSION}-${NVIDIA_DRIVER_VERSION}.tar.bz2
 rm -f $BIN_FILE $LIB_FILE $MOD_FILE
-tar -xvjf ${DRIVERS_ARCHIVE}
+tar -xvf ${DRIVERS_ARCHIVE}
 rm ${DRIVERS_ARCHIVE}
 
 # Copy tools, libraries and modules
