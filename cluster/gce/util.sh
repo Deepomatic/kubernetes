@@ -495,14 +495,20 @@ function create-node-template() {
 
   local attempt=1
   local preemptible_minions=""
+  local machine_spec=()
   if [[ "${PREEMPTIBLE_NODE}" == "true" ]]; then
     preemptible_minions="--preemptible --maintenance-policy TERMINATE"
+  fi
+  if [[ "${NODE_SIZE}" != "custom" ]]; then
+    machine_spec=( --machine-type "${NODE_SIZE}" )
+  else
+    machine_spec=( --custom-cpu "${NODE_CUSTOM_CPU}" --custom-memory "${NODE_CUSTOM_MEMORY}" )
   fi
   while true; do
     echo "Attempt ${attempt} to create ${1}" >&2
     if ! gcloud compute instance-templates create "$template_name" \
       --project "${PROJECT}" \
-      --machine-type "${NODE_SIZE}" \
+      "${machine_spec[@]}" \
       --boot-disk-type "${NODE_DISK_TYPE}" \
       --boot-disk-size "${NODE_DISK_SIZE}" \
       --image-project="${NODE_IMAGE_PROJECT}" \
@@ -1088,10 +1094,16 @@ function set_num_migs() {
 # - ZONE
 function create-nodes() {
   if [ "${GPU_COUNT}" -gt 0 ]; then
+    local machine_spec=()
     if [ -n "${NODE_SCOPES}" ]; then
       scope_flags="--scopes ${NODE_SCOPES}"
     else
       scope_flags="--no-scopes"
+    fi
+    if [[ "${NODE_SIZE}" != "custom" ]]; then
+      machine_spec=( --machine-type "${NODE_SIZE}" )
+    else
+      machine_spec=( --custom-cpu "${NODE_CUSTOM_CPU}" --custom-memory "${NODE_CUSTOM_MEMORY}" )
     fi
     for ((i=1; i<=${NUM_NODES}; i++)); do
       local attempt=1
@@ -1100,7 +1112,7 @@ function create-nodes() {
         if ! gcloud beta compute instances create ${NODE_INSTANCE_PREFIX}-$i \
           --project "${PROJECT}" \
           --zone "${ZONE}" \
-          --machine-type "${NODE_SIZE}" \
+          "${machine_spec[@]}" \
           --boot-disk-type "${NODE_DISK_TYPE}" \
           --boot-disk-size "${NODE_DISK_SIZE}" \
           --image-project "${NODE_IMAGE_PROJECT}" \
